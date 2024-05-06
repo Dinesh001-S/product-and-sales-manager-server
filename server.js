@@ -99,6 +99,11 @@ app.post('/bill', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+const calculateTotal = (purchases) => {
+  return purchases.reduce((total, purchase) => total + parseFloat(purchase.price) * parseFloat(purchase.quantity), 0).toFixed(2);
+};
+
 const productSchema = new mongoose.Schema({
   productName: String,
   price: Number,
