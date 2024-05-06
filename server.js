@@ -39,10 +39,49 @@ mongoose.connect('mongodb+srv://dinesh:pJPP7wn3X5SVMjCX@bill-data.2rwmc5n.mongod
   console.error('Error connecting to DB:', e);
 });
 
+
 app.post('/bill', async (req, res) => {
+  let rollbackProducts = []; // To store products that need to be rolled back
   try {
-    const { purchases, total } = req.body;
+    const { purchases } = req.body;
     
+    // Calculate the total quantity of each product being purchased
+    const productQuantities = purchases.reduce((acc, purchase) => {
+      acc[purchase.productName] = (acc[purchase.productName] || 0) + parseFloat(purchase.quantity);
+      return acc;
+    }, {});
+
+    // Update units of each product in the database and check for negative units
+    for (const productName in productQuantities) {
+      const quantity = productQuantities[productName];
+      const product = await Product.findOne({ productName });
+
+      if (!product) {
+        return res.status(404).json({ error: `Product '${productName}' not found` });
+      }
+
+      const updatedUnits = product.units - quantity;
+
+      if (updatedUnits < 0) {
+        // If units become negative, add the product to rollback list
+        rollbackProducts.push({ productName, units: product.units });
+      } else {
+        // Update units in the database
+        await Product.updateOne({ productName }, { $set: { units: updatedUnits } });
+      }
+    }
+
+    if (rollbackProducts.length > 0) {
+      // Roll back units of all affected products to their units before the bill button click
+      for (const rollbackProduct of rollbackProducts) {
+        await Product.updateOne({ productName: rollbackProduct.productName }, { $set: { units: rollbackProduct.units } });
+      }
+      // Alert user about negative units
+      return res.status(400).json({ error: 'One or more products have insufficient units' });
+    }
+
+    const total = calculateTotal(purchases);
+
     const newBill = new Bill({
       purchases,
       total,
@@ -53,6 +92,10 @@ app.post('/bill', async (req, res) => {
     res.status(200).json({ message: 'Data stored successfully' });
   } catch (error) {
     console.error(error);
+    // Roll back units of all affected products in case of any error
+    for (const rollbackProduct of rollbackProducts) {
+      await Product.updateOne({ productName: rollbackProduct.productName }, { $set: { units: rollbackProduct.units } });
+    }
     res.status(500).json({ message: 'Internal server error' });
   }
 });
