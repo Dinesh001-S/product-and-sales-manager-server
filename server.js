@@ -41,17 +41,15 @@ mongoose.connect('mongodb+srv://dinesh:pJPP7wn3X5SVMjCX@bill-data.2rwmc5n.mongod
 
 
 app.post('/bill', async (req, res) => {
-  let rollbackProducts = []; // To store products that need to be rolled back
+  let rollbackProducts = []; 
   try {
     const { purchases } = req.body;
     
-    // Calculate the total quantity of each product being purchased
     const productQuantities = purchases.reduce((acc, purchase) => {
       acc[purchase.productName] = (acc[purchase.productName] || 0) + parseFloat(purchase.quantity);
       return acc;
     }, {});
 
-    // Update units of each product in the database and check for negative units
     for (const productName in productQuantities) {
       const quantity = productQuantities[productName];
       const product = await Product.findOne({ productName });
@@ -63,20 +61,16 @@ app.post('/bill', async (req, res) => {
       const updatedUnits = product.units - quantity;
 
       if (updatedUnits < 0) {
-        // If units become negative, add the product to rollback list
         rollbackProducts.push({ productName, units: product.units });
       } else {
-        // Update units in the database
         await Product.updateOne({ productName }, { $set: { units: updatedUnits } });
       }
     }
 
     if (rollbackProducts.length > 0) {
-      // Roll back units of all affected products to their units before the bill button click
       for (const rollbackProduct of rollbackProducts) {
         await Product.updateOne({ productName: rollbackProduct.productName }, { $set: { units: rollbackProduct.units } });
       }
-      // Alert user about negative units
       return res.status(400).json({ error: 'One or more products have insufficient units' });
     }
 
@@ -92,7 +86,6 @@ app.post('/bill', async (req, res) => {
     res.status(200).json({ message: 'Data stored successfully' });
   } catch (error) {
     console.error(error);
-    // Roll back units of all affected products in case of any error
     for (const rollbackProduct of rollbackProducts) {
       await Product.updateOne({ productName: rollbackProduct.productName }, { $set: { units: rollbackProduct.units } });
     }
@@ -108,36 +101,25 @@ const productSchema = new mongoose.Schema({
   productName: String,
   price: Number,
   type: String,
-  units: Number, // Add units field
+  units: Number,
   date: { type: Date, default: Date.now }
 });
 
 const Product = mongoose.model('Product', productSchema);
-// POST endpoint to add a new product
 app.post('/products', async (req, res) => {
   try {
-    // Destructure fields from request body
     const { productName, price, type, units } = req.body;
-
-    // Create a new product instance
     const newProduct = new Product({ productName, price, type, units });
 
-    // Save the product to the database
     await newProduct.save();
 
-    // Send success response
     res.json({ message: 'Product added successfully' });
   } catch (error) {
-    // Handle errors
     console.error('Error adding product:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Create a model for the Product collection
-
-
-// Endpoint to fetch existing products
 app.get('/products', async (req, res) => {
   try {
     const products = await Product.find();
@@ -147,7 +129,7 @@ app.get('/products', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// Endpoint to update an existing product
+
 app.put('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -171,10 +153,9 @@ app.put('/products/:id', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// Endpoint to fetch distinct product names for suggestions
+
 app.get('/products/suggestions', async (req, res) => {
   try {
-    // Use distinct() method to get unique product names
     const productNames = await Product.distinct('productName');
     res.json({ productNames });
   } catch (error) {
@@ -183,27 +164,20 @@ app.get('/products/suggestions', async (req, res) => {
   }
 });
 
-// Endpoint to fetch the price of a product by name
 app.get('/products/price', async (req, res) => {
   try {
     const { productName } = req.query;
-    // Find the product by name in the database
     const product = await Product.findOne({ productName });
     if (product) {
-      // If the product is found, send its price in the response
       res.json({ price: product.price });
     } else {
-      // If the product is not found, send a 404 error response
       res.status(404).json({ error: 'Product not found' });
     }
   } catch (error) {
     console.error('Error fetching product price:', error);
-    // Send a 500 error response in case of any server error
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-// Endpoint to add a new product
-
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -212,7 +186,7 @@ const userSchema = new mongoose.Schema({
   gender: { type: String },
   date: { type: Date, default: Date.now },
   shift: { type: String },
-  image: { data: Buffer, contentType: String }, // Modified to store image in the database
+  image: { data: Buffer, contentType: String },
 });
 
 const User = mongoose.model('User', userSchema);
@@ -226,8 +200,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
-
-// Middleware and routes remain the same
 
 app.post('/signup', upload.single('image'), async (req, res) => {
   try {
@@ -243,11 +215,11 @@ app.post('/signup', upload.single('image'), async (req, res) => {
       role: req.body.role.trim(),
       age: req.body.age,
       gender: req.body.gender,
-      date: req.body.date, // Save the date from the request body
+      date: req.body.date, 
       shift: req.body.shift,
       image: {
         data: fs.readFileSync(req.file.path),
-        contentType: 'image/png', // Adjust content type based on file type
+        contentType: 'image/png', 
       }
     });
 
@@ -277,8 +249,7 @@ app.post('/login', async (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
-    // Here you can generate JWT token for authentication
-    // For simplicity, returning user data without password
+    
     app.use('/uploads', express.static('uploads'));
     res.status(200).json({
       username: user.username,
@@ -319,13 +290,10 @@ app.delete('/users/:id', async (req, res) => {
   }
 });
 
-// Serve static files from uploads folder
-
 app.get('/', (req, res) => {
     res.send('Server is running. Use the appropriate API endpoints.');
   });
   
-  //  Handle undefined routes with a wildcard route
    app.get('*', (req, res) => {
      res.status(404).send('404 - Not Found'); 
     });
